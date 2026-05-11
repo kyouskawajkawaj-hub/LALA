@@ -1,0 +1,766 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Pares ni Balong – Online Ordering</title>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    onerror="document.getElementById('map').innerHTML='<p>Map failed to load. Please refresh.</p>'"
+  />
+  <style>
+    :root {
+      --primary: #8B0000;
+      --secondary: #FFD700;
+      --bg: #1a1a1a;
+      --card: #2a2a2a;
+      --text: #f5f5f5;
+      --accent: #ffb300;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      line-height: 1.6;
+    }
+    .container { max-width: 800px; margin: 0 auto; padding: 1rem; }
+    header { text-align: center; padding: 1.5rem 0; background: var(--primary); border-bottom: 4px solid var(--secondary); }
+    header h1 { color: var(--secondary); font-size: 2.2rem; letter-spacing: 2px; }
+    .logo-img { font-size: 2rem; }
+    .section-title {
+      background: var(--primary);
+      color: var(--secondary);
+      padding: 0.5rem 1rem;
+      margin: 1.5rem 0 0.8rem;
+      border-radius: 8px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+    .menu-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--card);
+      padding: 0.8rem;
+      border-radius: 8px;
+      margin-bottom: 0.5rem;
+    }
+    .menu-left { flex: 2; }
+    .menu-right { display: flex; align-items: center; gap: 0.5rem; }
+    .qty-btn {
+      background: var(--secondary);
+      color: var(--bg);
+      border: none;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 1.2rem;
+    }
+    .qty-btn:active { transform: scale(0.9); }
+    .qty-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .qty-display {
+      min-width: 24px;
+      text-align: center;
+      font-weight: bold;
+    }
+    .price { color: var(--accent); font-weight: bold; margin-left: 0.5rem; }
+    .cart-section {
+      background: var(--card);
+      border-radius: 12px;
+      padding: 1rem;
+      margin: 1.5rem 0;
+    }
+    .delivery-option { display: flex; gap: 1rem; flex-wrap: wrap; margin: 1rem 0; }
+    .delivery-btn {
+      background: var(--secondary);
+      color: var(--bg);
+      border: none;
+      padding: 0.6rem 1rem;
+      border-radius: 8px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+    .delivery-btn.active { background: var(--accent); }
+    .map-container {
+      height: 250px;
+      width: 100%;
+      border-radius: 12px;
+      margin: 1rem 0;
+    }
+    .verification-area {
+      background: var(--card);
+      padding: 1rem;
+      border-radius: 12px;
+      margin-top: 1rem;
+    }
+    .form-group { margin: 0.8rem 0; }
+    .form-group input {
+      width: 100%;
+      padding: 0.7rem;
+      border-radius: 8px;
+      border: 1px solid #555;
+      background: #1e1e1e;
+      color: white;
+      font-size: 1rem;
+    }
+    .shielded input {
+      background: #333;
+      color: #ccc;
+    }
+    .btn {
+      background: var(--secondary);
+      color: var(--bg);
+      border: none;
+      padding: 0.7rem 1.2rem;
+      border-radius: 8px;
+      font-weight: bold;
+      cursor: pointer;
+      margin: 0.5rem 0;
+    }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.8);
+      justify-content: center;
+      align-items: center;
+      z-index: 999;
+    }
+    .modal-content {
+      background: var(--card);
+      border-radius: 16px;
+      padding: 1.5rem;
+      max-width: 500px;
+      width: 90%;
+    }
+    .status-msg { font-weight: bold; padding: 0.5rem; border-radius: 8px; }
+    .success { background: #2e7d32; color: white; }
+    .error { background: #b71c1c; color: white; }
+    .warning { background: #e65100; color: white; }
+    .phone-reminder { color: #ff5252; font-size: 0.9rem; margin-left: 0.5rem; }
+  </style>
+</head>
+<body>
+<header>
+  <div class="logo-img">🍲 <strong>PARES NI BALONG</strong> 🍲</div>
+  <p style="color: var(--secondary);">Kanto‑Style • Retiro • Silog • Pulutan</p>
+  <p style="font-size:0.9rem;">Open: 2PM – 1AM (Closed Mon/Tue)</p>
+</header>
+
+<div class="container" id="app">
+  <!-- MENU RENDERED DYNAMICALLY -->
+  <div id="menu-container"></div>
+
+  <!-- CART & DELIVERY -->
+  <div class="cart-section">
+    <h3>🛒 Your Cart</h3>
+    <ul id="cartItems" style="list-style:none;"></ul>
+    <p>Subtotal: ₱<span id="subtotal">0</span></p>
+    <p>Delivery (Balong's Rider): ₱<span id="deliveryFee">0</span></p>
+    <h4>Total: ₱<span id="totalAmount">0</span></h4>
+
+    <div class="delivery-option">
+      <button class="delivery-btn" id="selfBookBtn">📱 Self‑book (Lalamove/Move‑It)</button>
+      <button class="delivery-btn active" id="balongRiderBtn">🏍️ Balong's Rider</button>
+    </div>
+    <div id="selfBookLinks" style="display:none; margin-top:0.5rem;">
+      <a href="#" id="lalamoveLink" class="btn">Open Lalamove</a>
+      <a href="#" id="moveitLink" class="btn">Open Move‑It</a>
+      <a href="#" id="gcashLink" class="btn">Open GCash</a>
+    </div>
+    <div>
+      <p>
+        📞 Your Phone:
+        <input type="tel" id="customerPhone" placeholder="+63 9XX XXX XXXX" />
+        <span id="phoneReminder" class="phone-reminder" style="display:none;">⚠️ Required for rider call</span>
+      </p>
+      <p>📍 Your Address: <input type="text" id="customerAddress" readonly placeholder="Auto‑filled from GPS" /></p>
+      <!-- GPS is requested automatically, button removed -->
+    </div>
+    <div class="map-container" id="map">Loading map...</div>
+    <p id="distanceDisplay"></p>
+  </div>
+
+  <!-- PAYMENT VERIFICATION -->
+  <div class="verification-area">
+    <h3>📸 Payment Verification</h3>
+    <input type="file" id="receiptInput" accept="image/*" capture="environment" />
+    <button class="btn" id="verifyBtn">🔍 Scan & Verify Receipt</button>
+    <div id="ocrStatus"></div>
+
+    <div class="form-group shielded">
+      <label>Name (masked):</label>
+      <input type="text" id="ocrName" readonly />
+    </div>
+    <div class="form-group shielded">
+      <label>Amount (from receipt):</label>
+      <input type="text" id="ocrAmount" readonly />
+    </div>
+    <div class="form-group shielded">
+      <label>Reference No.:</label>
+      <input type="text" id="ocrRef" readonly />
+    </div>
+    <div class="form-group shielded">
+      <label>Date & Time:</label>
+      <input type="text" id="ocrDate" readonly />
+    </div>
+
+    <button class="btn" id="confirmPaymentBtn" disabled>✅ Confirm & Place Order</button>
+    <div id="verificationResult"></div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="modal" id="reviewModal">
+  <div class="modal-content">
+    <h3>🧾 Order Review</h3>
+    <div id="reviewContent"></div>
+    <button class="btn" id="placeOrderFinal" disabled>Place Order</button>
+    <button class="btn" id="closeReview">Cancel</button>
+  </div>
+</div>
+<div class="modal" id="resultModal">
+  <div class="modal-content" id="resultMessage"></div>
+</div>
+
+<script>
+  // ========== CONFIGURATION ==========
+  const SHEET_API_URL = 'https://api.sheetbest.com/sheets/2e1c1dfc-eeee-449a-a2ec-2e65a998db95';
+  // If using Cloudflare Worker proxy for Vision OCR, set the worker URL below
+  const API_PROXY_URL = '';  // e.g., 'https://balong-api.xxxx.workers.dev'
+
+  // ========== MENU DATA ==========
+  const menu = {
+    kanto: [
+      { name: "PARES WITHOUT RICE", price: 75 },
+      { name: "PARES W/RICE", price: 85 },
+      { name: "PARES W/TUMBONG", price: 130 },
+      { name: "PARES W/BAGNET", price: 130 },
+      { name: "PARES W/CHICHABU", price: 130 },
+      { name: "REGULAR PARES OVERLOAD", price: 130 },
+      { name: "LECHON PARES OVERLOAD", price: 189 },
+      { name: "BEEF MAMI WITH RICE", price: 60 },
+      { name: "BEEF MAMI WITHOUT RICE", price: 50 },
+      { name: "BEEF MAMI W/ BAGNET", price: 130 },
+      { name: "BEEF MAMI W/ CHICHABU", price: 130 },
+      { name: "BEEF MAMI OVERLOAD", price: 199 },
+    ],
+    retiro: [
+      { name: "PARES W/RICE", price: 95 },
+      { name: "PARES W/BAGNET", price: 150 },
+      { name: "PARES W/CHICHABU", price: 150 },
+      { name: "PARES OVERLOAD (BEEF,CHICHABU,BAGNET)", price: 199 },
+    ],
+    silog: [
+      { name: "LECHON SILOG", price: 129 },
+      { name: "LIEMPO SILOG", price: 129 },
+      { name: "CHICHABU SILOG", price: 129 },
+      { name: "BANGUS SILOG", price: 129 },
+      { name: "CHICKEN SILOG", price: 129 },
+      { name: "SISIG SILOG", price: 129 },
+      { name: "LUMPIANG ISDA SILOG", price: 129 },
+      { name: "BEEF TAPA SILOG", price: 129 },
+      { name: "TOCINO SILOG", price: 129 },
+      { name: "LONGGANISA SILOG", price: 129 },
+    ],
+    budbod: [
+      { name: "BUDBOD REGULAR", price: 129 },
+      { name: "BUDBOD TAPA", price: 199 },
+      { name: "BUDBOD TOCINO", price: 199 },
+      { name: "BUDBOD LONGGANISA", price: 199 },
+      { name: "BUDBOD LUMPIANG ISDA", price: 199 },
+    ],
+    ulam: [
+      { name: "KARE-KARE BAGNET", price: 170 },
+      { name: "KARE-KARE CHICHABU", price: 170 },
+      { name: "DINAKDAKAN", price: 170 },
+      { name: "SISIG", price: 180 },
+      { name: "LUMPIANG ISDA", price: 160 },
+      { name: "CHICHARON BULAKLAK", price: 170 },
+      { name: "LECHON KAWALI", price: 170 },
+    ],
+    addons: [
+      { name: "GARLIC RICE", price: 15 },
+      { name: "HALF RICE", price: 15 },
+      { name: "EXTRA BAGOONG", price: 15 },
+      { name: "SOFTDRINKS", price: 25 },
+      { name: "BONEMARROW", price: 95 },
+      { name: "KAMATIS SIBUYAS BAGOONG", price: 25 },
+      { name: "LECHON SAUCE", price: 10 },
+      { name: "EXTRA EGG", price: 20 },
+    ],
+    freebies: [
+      { name: "CHILI OIL", price: 0 },
+      { name: "CALAMANSI", price: 0 },
+      { name: "KETCHUP", price: 0 },
+    ]
+  };
+
+  const comboLists = ["LECHON","LIEMPO","BANGUS","CHICKEN","CHICHABU","SISIG","BEEF TAPA","TOCINO","LONGGANISA","LUMPIANG ISDA"];
+
+  // ========== STATE ==========
+  let cart = [];
+  let deliveryMethod = 'balong';
+  let userLocation = null;       // { lat, lng }
+  let receiptData = null;       // OCR parsed data
+  let verifiedOK = false;
+  let ocrInProgress = false;
+
+  // ========== RENDER MENU ==========
+  function renderAllMenus() {
+    const container = document.getElementById('menu-container');
+    let html = '';
+    // Kanto
+    html += '<div class="section-title">🍖 PARES KANTO STYLE</div><div class="menu-items">';
+    menu.kanto.forEach(item => html += menuItemHTML(item));
+    html += '</div>';
+    // Retiro
+    html += '<div class="section-title">🍲 PARES RETIRO STYLE</div><div class="menu-items">';
+    menu.retiro.forEach(item => html += menuItemHTML(item));
+    html += '</div>';
+    // Combo
+    html += `<div class="section-title">🥘 COMBO MEALS (₱199 – Choose 2 Ulam)</div>
+      <div style="display:flex; gap:1rem; flex-wrap:wrap; margin-bottom:1rem;">
+        <select id="comboA">${comboOpts()}</select>
+        <select id="comboB">${comboOpts()}</select>
+        <button class="btn" id="addComboBtn">Add Combo</button>
+      </div>`;
+    // Silog
+    html += '<div class="section-title">🍳 HOMEMADE SILOG MEALS</div><div class="menu-items">';
+    menu.silog.forEach(item => html += menuItemHTML(item));
+    html += '</div>';
+    // Budbod
+    html += '<div class="section-title">🍚 BUDBOD MEALS</div><div class="menu-items">';
+    menu.budbod.forEach(item => html += menuItemHTML(item));
+    html += '</div>';
+    // Ulam
+    html += '<div class="section-title">🥢 ULAM / PULUTAN / ALA CARTÉ</div><div class="menu-items">';
+    menu.ulam.forEach(item => html += menuItemHTML(item));
+    html += '</div>';
+    // Add‑ons
+    html += '<div class="section-title">➕ ADD‑ONS</div><div class="menu-items">';
+    menu.addons.forEach(item => html += menuItemHTML(item));
+    html += '</div>';
+    // Freebies
+    html += '<div class="section-title">🎁 FREEBIES</div><div class="menu-items">';
+    menu.freebies.forEach(item => html += menuItemHTML(item));
+    html += '</div>';
+    container.innerHTML = html;
+
+    // Combo select logic
+    const selA = document.getElementById('comboA');
+    const selB = document.getElementById('comboB');
+    function updateComboB() {
+      const valA = selA.value;
+      Array.from(selB.options).forEach(opt => opt.disabled = opt.value === valA);
+      if (selB.value === valA) selB.value = '';
+    }
+    selA.addEventListener('change', updateComboB);
+    document.getElementById('addComboBtn').addEventListener('click', () => {
+      const a = selA.value, b = selB.value;
+      if (!a || !b || a === b) { alert('Please choose two different ulam.'); return; }
+      addToCart(`COMBO: ${a} & ${b}`, 199);
+    });
+  }
+
+  function menuItemHTML(item) {
+    const id = item.name.replace(/\s/g,'');
+    return `<div class="menu-item">
+      <span class="menu-left">${item.name}</span>
+      <span class="menu-right">
+        <span class="price">₱${item.price}</span>
+        <button class="qty-btn minus" data-name="${item.name}" data-price="${item.price}">−</button>
+        <span class="qty-display" id="qty-${id}">0</span>
+        <button class="qty-btn plus" data-name="${item.name}" data-price="${item.price}">+</button>
+      </span>
+    </div>`;
+  }
+
+  function comboOpts() {
+    return comboLists.map(item => `<option value="${item}">${item}</option>`).join('');
+  }
+
+  // ========== CART LOGIC ==========
+  function addToCart(name, price) {
+    const existing = cart.find(c => c.name === name);
+    if (existing) existing.qty++;
+    else cart.push({ name, price, qty: 1 });
+    updateCartDisplay();
+  }
+
+  function removeFromCart(name) {
+    const idx = cart.findIndex(c => c.name === name);
+    if (idx > -1) {
+      if (cart[idx].qty > 1) cart[idx].qty--;
+      else cart.splice(idx, 1);
+    }
+    updateCartDisplay();
+  }
+
+  function updateCartDisplay() {
+    const ul = document.getElementById('cartItems');
+    ul.innerHTML = '';
+    let subtotal = 0;
+    cart.forEach(item => {
+      subtotal += item.price * item.qty;
+      const li = document.createElement('li');
+      li.innerHTML = `${item.name} x${item.qty} = ₱${item.price * item.qty} 
+        <button class="qty-btn cart-remove" data-name="${item.name}">−</button>`;
+      ul.appendChild(li);
+    });
+    document.getElementById('subtotal').textContent = subtotal;
+    updateTotal();
+    updateAllQtyDisplays();
+  }
+
+  function updateAllQtyDisplays() {
+    document.querySelectorAll('.qty-display').forEach(el => el.textContent = '0');
+    cart.forEach(c => {
+      const id = 'qty-' + c.name.replace(/\s/g,'');
+      const el = document.getElementById(id);
+      if (el) el.textContent = c.qty;
+    });
+  }
+
+  function updateTotal() {
+    const subtotal = parseInt(document.getElementById('subtotal').textContent) || 0;
+    let delivery = 0;
+    if (deliveryMethod === 'balong' && userLocation) {
+      const dist = computeDistance();
+      if (dist !== null) {
+        delivery = 20 + (dist * 5);
+        document.getElementById('deliveryFee').textContent = delivery.toFixed(2);
+      }
+    } else {
+      document.getElementById('deliveryFee').textContent = '0';
+    }
+    document.getElementById('totalAmount').textContent = (subtotal + delivery).toFixed(2);
+  }
+
+  // ========== EVENT DELEGATION FOR MENU & CART ==========
+  document.addEventListener('click', (e) => {
+    if (e.target.classList.contains('plus')) {
+      addToCart(e.target.dataset.name, parseInt(e.target.dataset.price));
+    } else if (e.target.classList.contains('minus')) {
+      removeFromCart(e.target.dataset.name);
+    } else if (e.target.classList.contains('cart-remove')) {
+      removeFromCart(e.target.dataset.name);
+    }
+  });
+
+  // ========== LOCATION (AUTOMATIC) ==========
+  const storeLat = 14.6602, storeLng = 121.0280;
+
+  function computeDistance() {
+    if (!userLocation) return null;
+    const R = 6371;
+    const dLat = (userLocation.lat - storeLat) * Math.PI/180;
+    const dLon = (userLocation.lng - storeLng) * Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(storeLat*Math.PI/180)*Math.cos(userLocation.lat*Math.PI/180) * Math.sin(dLon/2)**2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  }
+
+  function requestLocation() {
+    if (!navigator.geolocation) {
+      document.getElementById('customerAddress').placeholder = 'Geolocation not supported';
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(pos => {
+      userLocation = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+      document.getElementById('customerAddress').value = `${userLocation.lat.toFixed(6)}, ${userLocation.lng.toFixed(6)}`;
+      const dist = computeDistance();
+      document.getElementById('distanceDisplay').textContent = `Distance: ${dist?.toFixed(2)} km`;
+      updateTotal();
+      if (window.mapInstance) {
+        window.mapInstance.setView([userLocation.lat, userLocation.lng], 14);
+        L.marker([userLocation.lat, userLocation.lng]).addTo(window.mapInstance).bindPopup('You').openPopup();
+      }
+    }, err => {
+      document.getElementById('customerAddress').placeholder = 'Location access denied. Enable GPS & refresh.';
+    });
+  }
+
+  // ========== MAP INIT ==========
+  function initMap() {
+    if (!window.leafletLoaded || typeof L === 'undefined') {
+      document.getElementById('map').innerHTML = '<p class="warning">Map library failed to load. Please refresh.</p>';
+      return;
+    }
+    const map = L.map('map').setView([storeLat, storeLng], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+    L.marker([storeLat, storeLng]).addTo(map).bindPopup('Pares ni Balong').openPopup();
+    window.mapInstance = map;
+    // Auto request location after map is ready
+    requestLocation();
+  }
+
+  // ========== DELIVERY DEEP LINKS ==========
+  function openAppOrStore(packageName, storeUrl) {
+    const intentUrl = `intent://#Intent;scheme=market;package=${packageName};end;`;
+    window.location.href = intentUrl;
+    setTimeout(() => { window.location.href = storeUrl; }, 500);
+  }
+
+  document.getElementById('lalamoveLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    openAppOrStore('hk.easyvan.app.client', 'https://play.google.com/store/apps/details?id=hk.easyvan.app.client');
+  });
+  document.getElementById('moveitLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    openAppOrStore('com.moveit.app.customer', 'https://play.google.com/store/apps/details?id=com.moveit.app.customer');
+  });
+  document.getElementById('gcashLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    openAppOrStore('com.globe.gcash.android', 'https://play.google.com/store/apps/details?id=com.globe.gcash.android');
+  });
+
+  document.getElementById('selfBookBtn').addEventListener('click', () => {
+    deliveryMethod = 'self';
+    document.getElementById('selfBookLinks').style.display = 'block';
+    document.getElementById('balongRiderBtn').classList.remove('active');
+    document.getElementById('selfBookBtn').classList.add('active');
+    updateTotal();
+  });
+  document.getElementById('balongRiderBtn').addEventListener('click', () => {
+    deliveryMethod = 'balong';
+    document.getElementById('selfBookLinks').style.display = 'none';
+    document.getElementById('balongRiderBtn').classList.add('active');
+    document.getElementById('selfBookBtn').classList.remove('active');
+    updateTotal();
+  });
+
+  // ========== RECEIPT OCR ==========
+  async function visionOcr(imageBlob) {
+    if (!API_PROXY_URL) throw new Error('Vision proxy not configured');
+    const formData = new FormData();
+    formData.append('image', imageBlob);
+    const response = await fetch(`${API_PROXY_URL}/ocr`, { method: 'POST', body: formData });
+    if (!response.ok) throw new Error('Vision API proxy error');
+    const data = await response.json();
+    return data.text;
+  }
+
+  document.getElementById('verifyBtn').addEventListener('click', async () => {
+    if (ocrInProgress) return;
+    const fileInput = document.getElementById('receiptInput');
+    if (!fileInput.files[0]) { alert('Please select a receipt photo.'); return; }
+    const img = fileInput.files[0];
+
+    ocrInProgress = true;
+    document.getElementById('verifyBtn').disabled = true;
+    document.getElementById('ocrStatus').textContent = 'Scanning...';
+
+    let extractedText = '';
+    try {
+      if (window.tesseractLoaded && typeof Tesseract !== 'undefined') {
+        const worker = await Tesseract.createWorker('eng');
+        const { data: { text } } = await worker.recognize(img);
+        await worker.terminate();
+        extractedText = text;
+      } else if (API_PROXY_URL) {
+        extractedText = await visionOcr(img);
+      } else {
+        throw new Error('No OCR engine available');
+      }
+
+      const parsed = parseReceiptText(extractedText);
+      if (!parsed) {
+        document.getElementById('ocrStatus').textContent = 'OCR failed. Try a clearer photo.';
+        ocrInProgress = false;
+        document.getElementById('verifyBtn').disabled = false;
+        return;
+      }
+      document.getElementById('ocrName').value = parsed.name || '';
+      document.getElementById('ocrAmount').value = parsed.amount || '';
+      document.getElementById('ocrRef').value = parsed.ref || '';
+      document.getElementById('ocrDate').value = parsed.datetime || '';
+      receiptData = parsed;
+      document.getElementById('ocrStatus').textContent = 'Receipt scanned. Check details.';
+      validateReceipt();
+    } catch (err) {
+      console.error(err);
+      document.getElementById('ocrStatus').textContent = 'Error during OCR. Please try again.';
+    } finally {
+      ocrInProgress = false;
+      document.getElementById('verifyBtn').disabled = false;
+    }
+  });
+
+  function parseReceiptText(text) {
+    let name = '', amount = '', ref = '', datetime = '';
+    const nameMatch = text.match(/([A-Z]{2,}\s[A-Z]{2,}\*?\*?[\s\*A-Z]*)/);
+    if (nameMatch) name = nameMatch[0].trim();
+    const amountMatch = text.match(/₱\s?([\d,]+\.\d{2})/);
+    if (amountMatch) amount = amountMatch[1].replace(/,/g,'');
+    const refMatch = text.match(/\b(\d{13})\b/);
+    if (refMatch) ref = refMatch[1];
+    const dateMatch = text.match(/(\d{2}\/\d{2}\/\d{4})\s+(\d{1,2}:\d{2}\s?[AP]M)/i);
+    if (dateMatch) datetime = `${dateMatch[1]} ${dateMatch[2]}`;
+    return { name, amount, ref, datetime };
+  }
+
+  function validateReceipt() {
+    if (!receiptData) return;
+    const { name, amount, ref, datetime } = receiptData;
+    const totalDue = parseFloat(document.getElementById('totalAmount').textContent) || 0;
+    let reasons = [];
+
+    if (Math.abs(parseFloat(amount) - totalDue) > 0.01) {
+      reasons.push(`Amount mismatch: receipt ₱${amount}, order ₱${totalDue.toFixed(2)}`);
+    }
+
+    const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Manila"}));
+    const dtParts = datetime.match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{1,2}):(\d{2})\s?(AM|PM)/i);
+    if (dtParts) {
+      let [m,d,y,h,min,ap] = dtParts.slice(1);
+      m = parseInt(m)-1; d=parseInt(d); y=parseInt(y); h=parseInt(h);
+      if (ap.toUpperCase()==='PM' && h<12) h+=12;
+      const receiptDate = new Date(y,m,d,h,parseInt(min));
+      if ((now - receiptDate) > 24*60*60*1000) reasons.push('Receipt is older than 24 hours.');
+    } else {
+      reasons.push('Invalid date/time format.');
+    }
+
+    const usedRefs = JSON.parse(localStorage.getItem('usedRefs') || '[]');
+    if (ref && usedRefs.includes(ref)) reasons.push('Reference number already used.');
+
+    if (reasons.length > 0) {
+      document.getElementById('confirmPaymentBtn').disabled = true;
+      document.getElementById('verificationResult').innerHTML = `<div class="status-msg error">❌ ${reasons.join('; ')}</div>`;
+      verifiedOK = false;
+    } else {
+      document.getElementById('confirmPaymentBtn').disabled = false;
+      document.getElementById('verificationResult').innerHTML = `<div class="status-msg success">✅ Receipt valid. You can now confirm.</div>`;
+      verifiedOK = true;
+    }
+  }
+
+  // ========== SEND ORDER TO SHEET ==========
+  async function sendOrderToSheet(orderData) {
+    try {
+      const response = await fetch(SHEET_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify([orderData])
+      });
+      if (!response.ok) throw new Error('Sheet API error');
+    } catch (err) {
+      console.error('Failed to log order:', err);
+    }
+  }
+
+  document.getElementById('confirmPaymentBtn').addEventListener('click', () => {
+    if (!verifiedOK) return alert('Receipt not verified.');
+    const usedRefs = JSON.parse(localStorage.getItem('usedRefs') || '[]');
+    usedRefs.push(receiptData.ref);
+    localStorage.setItem('usedRefs', JSON.stringify(usedRefs));
+    showReviewModal();
+  });
+
+  function showReviewModal() {
+    const modal = document.getElementById('reviewModal');
+    const content = document.getElementById('reviewContent');
+    const now = new Date().toLocaleString("en-US", {timeZone: "Asia/Manila"});
+    let html = `<p><strong>Time:</strong> ${now}</p>`;
+    html += `<p><strong>Name:</strong> ${receiptData.name}</p>`;
+    html += `<p><strong>Amount:</strong> ₱${receiptData.amount}</p>`;
+    html += `<p><strong>Ref:</strong> ${receiptData.ref}</p>`;
+    html += `<p><strong>Date/Time:</strong> ${receiptData.datetime}</p>`;
+    html += `<h4>Order:</h4><ul>`;
+    cart.forEach(c => html += `<li>${c.name} x${c.qty}</li>`);
+    html += `</ul><p>Total: ₱${document.getElementById('totalAmount').textContent}</p>`;
+    content.innerHTML = html;
+    document.getElementById('placeOrderFinal').disabled = false;
+    modal.style.display = 'flex';
+  }
+
+  document.getElementById('placeOrderFinal').addEventListener('click', async () => {
+    document.getElementById('reviewModal').style.display = 'none';
+
+    const timeStamp = new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" });
+    const orderId = `ORD-${Date.now()}`;
+    const orderRow = {
+      Time_Stamp: timeStamp,
+      Name: receiptData.name,
+      Amount: receiptData.amount,
+      Date_Time: receiptData.datetime,
+      Total: document.getElementById('totalAmount').textContent,
+      Verify: "verified",
+      Orders: cart.map(item => `${item.name} x${item.qty}`).join('; '),
+      Order_ID: orderId
+    };
+    await sendOrderToSheet(orderRow);
+
+    // Auto-call if Balong's Rider is within 0.3 km
+    if (deliveryMethod === 'balong' && userLocation) {
+      const dist = computeDistance();
+      if (dist !== null && dist <= 0.3) {
+        const phone = document.getElementById('customerPhone').value.trim();
+        if (phone) {
+          window.location.href = `tel:${phone}`;
+        } else {
+          document.getElementById('phoneReminder').style.display = 'inline';
+        }
+      }
+    }
+
+    showResult('🎉 Successful Verification! Your order is now ready for cooking! Thank You for ordering!', 'success');
+    cart = []; updateCartDisplay();
+    receiptData = null; verifiedOK = false;
+    document.getElementById('confirmPaymentBtn').disabled = true;
+  });
+
+  function showResult(msg, type) {
+    const modal = document.getElementById('resultModal');
+    document.getElementById('resultMessage').innerHTML = `<div class="status-msg ${type}">${msg}</div>`;
+    modal.style.display = 'flex';
+    setTimeout(() => { modal.style.display = 'none'; }, 3000);
+  }
+
+  document.getElementById('closeReview').addEventListener('click', () => {
+    document.getElementById('reviewModal').style.display = 'none';
+  });
+  window.addEventListener('click', (e) => {
+    if (e.target.classList.contains('modal')) e.target.style.display = 'none';
+  });
+
+  // ========== OPEN HOURS CHECK ==========
+  function isOpenNow() {
+    const now = new Date(new Date().toLocaleString("en-US", {timeZone: "Asia/Manila"}));
+    const day = now.getDay();
+    if (day === 1 || day === 2) return false;
+    const hour = now.getHours();
+    return (hour >= 14 || hour < 1);
+  }
+
+  // ========== INIT ==========
+  window.addEventListener('load', () => {
+    if (!isOpenNow()) {
+      document.getElementById('app').innerHTML =
+        '<h2 style="color:var(--secondary);text-align:center;">We are currently closed. Open 2PM–1AM, Wed–Sun.</h2>';
+      return;
+    }
+    if (!window.leafletLoaded) {
+      document.getElementById('map').innerHTML = '<p class="warning">⚠️ Map library failed to load. Please refresh.</p>';
+    }
+    renderAllMenus();
+    initMap(); // map init + auto-location request
+    updateTotal();
+  });
+</script>
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"
+        onload="window.tesseractLoaded = true;"
+        onerror="console.error('Tesseract CDN failed')"></script>
+</body>
+</html>
